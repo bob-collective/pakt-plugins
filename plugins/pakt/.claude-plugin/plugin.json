@@ -1,0 +1,20 @@
+{
+  "name": "pakt",
+  "version": "0.1.4",
+  "description": "Draft, review, activate, and use proof-checked trading policies through Pakt.",
+  "author": {
+    "name": "BOB Collective",
+    "url": "https://gobob.xyz"
+  },
+  "homepage": "https://usepakt.ai",
+  "repository": "https://github.com/bob-collective/pakt-plugins",
+  "keywords": [
+    "trading",
+    "policy",
+    "hyperliquid",
+    "zero-knowledge"
+  ],
+  "displayName": "Pakt",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

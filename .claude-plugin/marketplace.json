@@ -1,0 +1,16 @@
+{
+  "name": "bob-collective",
+  "owner": {
+    "name": "BOB Collective",
+    "url": "https://gobob.xyz"
+  },
+  "description": "Proof-checked trading policy tools from BOB Collective.",
+  "plugins": [
+    {
+      "name": "pakt",
+      "source": "./plugins/pakt",
+      "description": "Draft, review, activate, and use proof-checked trading policies through Pakt.",
+      "strict": true
+    }
+  ]
+}

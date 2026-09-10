@@ -1,0 +1,40 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "pakt",
+  "version": "0.1.4",
+  "description": "Draft, review, activate, and use proof-checked trading policies through Pakt.",
+  "author": {
+    "name": "BOB Collective",
+    "url": "https://gobob.xyz"
+  },
+  "homepage": "https://usepakt.ai",
+  "repository": "https://github.com/bob-collective/pakt-plugins",
+  "keywords": [
+    "trading",
+    "policy",
+    "hyperliquid",
+    "zero-knowledge"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Pakt",
+        "shortDescription": "Proof-checked trading policies",
+        "longDescription": "Draft trading limits in plain language, approve the exact policy with your recoverable wallet, and authorize only requests that satisfy it.",
+        "developerName": "BOB Collective",
+        "category": "Finance",
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
+        "websiteURL": "https://usepakt.ai",
+        "privacyPolicyURL": "https://api.usepakt.ai/mcp/privacy",
+        "defaultPrompt": [
+          "Draft a conservative Pakt for review only.",
+          "Show my active Pakts.",
+          "Explain what this Pakt allows and blocks."
+        ]
+      }
+    }
+  }
+}

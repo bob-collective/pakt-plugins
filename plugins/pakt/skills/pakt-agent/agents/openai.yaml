@@ -1,0 +1,13 @@
+interface:
+  display_name: "Pakt"
+  short_description: "Review and use proof-checked trading policies"
+  default_prompt: "Use $pakt-agent to help me choose and draft personalized trading limits for review only."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "pakt"
+      description: "Remote Pakt authoring, lifecycle, and authorization server"
+      transport: "streamable_http"
+      url: "https://api.usepakt.ai/mcp"
+policy:
+  allow_implicit_invocation: true

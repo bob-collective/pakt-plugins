@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pakt": {
+      "type": "http",
+      "url": "https://api.usepakt.ai/mcp"
+    }
+  }
+}
