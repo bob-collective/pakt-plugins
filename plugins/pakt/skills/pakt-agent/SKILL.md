@@ -13,7 +13,7 @@ moves funds itself.
 ## Non-negotiable behavior
 
 - Never activate or disable a Pakt on the user's behalf. Preparation only stages
-  a five-minute browser challenge; the human approves it with their owner wallet.
+  a six-hour browser challenge; the human approves it with their owner wallet.
 - Never send, request, generate, or replace a private key or seed.
 - Never route around a refusal. Report the rule and the concrete value that
   crossed it. Retry only an infrastructure failure for which no signature was

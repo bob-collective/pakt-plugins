@@ -1,6 +1,6 @@
 # Pakt plugins
 
-Pakt agent plugin v0.1.4 for Claude Code and Codex. Authentication starts
+Pakt agent plugin v0.1.9 for Claude Code and Codex. Authentication starts
 when Pakt is first used; never share a wallet seed or private key.
 
 ```sh
