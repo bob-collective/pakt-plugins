@@ -21,21 +21,22 @@ moves funds itself.
 - Asset identity is venue-native. Pakt commits the exact chain or venue
   namespace, its native asset identifier, and the oracle identity used to value
   it; there is no second Pakt asset-id namespace. For hosted Hyperliquid, use
-  `list_hyperliquid_perp_markets` to resolve live default and HIP-3 names to
-  exact mainnet global perp asset ids, and use `get_execution_context` to read
-  the exact ids an active Pakt allows. Never retain or invent a symbol-to-id
-  mapping.
+  `list_hyperliquid_perp_markets` to resolve live default or HIP-3 names to exact
+  mainnet global perp asset ids, and use `get_execution_context` to read the
+  exact ids an active Pakt allows. Never retain or invent a symbol-to-id mapping.
 - Obey explicit scope such as “draft only” or “do not activate.” Do not end such
   a response with an activation sales pitch.
 
 ## Draft and review
 
 1. Browse with `list_pakt_templates()` when the user wants starting points. For
-   Hyperliquid perps, resolve the requested live markets with
-   `list_hyperliquid_perp_markets()` and copy its returned `asset_ref` objects
-   into the draft. The tool reports whether each market's metadata is compatible
-   with the current attestor; per-account margin mode is checked separately at
-   authorization time. Do not imply that an unsupported market can trade.
+   specifically named Hyperliquid perps, call `list_hyperliquid_perp_markets()`
+   once and copy the requested markets' returned `asset_ref` objects into the
+   draft; use `query` only when resolving one name without browsing the
+   catalogue. An `any` asset selection does not require enumerating the whole
+   catalogue. Inspect each `pakt_support` and follow `next_cursor` only when it
+   is non-null. Per-account margin mode is checked separately at authorization
+   time. Do not imply that an unsupported market can trade.
 2. Follow the returned `authoring_intake`. Unless the user already supplied the
    answers or explicitly requested unchanged example limits, ask in one concise
    prompt:
@@ -147,6 +148,7 @@ provisions, proves, signs, or submits anything.
 | Tool | Purpose |
 |---|---|
 | `list_pakt_templates()` | List shipped starting points; pure |
+| `list_hyperliquid_perp_markets(query?, cursor?, page_size?)` | Resolve one live market snapshot; pure |
 | `draft_pakt(preset_id)` / `draft_pakt(draft_json)` | Compile one review artifact; pure |
 | `prepare_pakt_activation(canonical_ssz)` | Stage browser owner-wallet activation; does not activate |
 | `prepare_pakt_disable(pakt_root)` | Stage permanent browser disable; does not disable |
