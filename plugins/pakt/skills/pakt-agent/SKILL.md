@@ -114,7 +114,10 @@ When a rebalance needs several IOC orders, send them as one Hyperliquid order
 batch (at most 10 legs) with one 30-second `expiresAfter`. Put risk-reducing
 and risk-increasing legs in that same batch: Pakt conservatively assumes every
 risk-increasing leg fills and every risk-reducing leg does not when checking the
-post-state limits.
+post-state limits. A separate batch whose every leg is venue-enforced
+reduce-only may use the bounded five-minute emergency-exit expiry window; it
+must still carry a future deadline, oppose an authenticated position, and stay
+within that position's aggregate size. It never becomes an unbounded signature.
 The client remains responsible for submission; neither call submits or moves
 funds. After the client observes a supported terminal Hyperliquid or Ethereum
 outcome, call `record_execution_completion(pakt_root, receipt_id, completion)`
