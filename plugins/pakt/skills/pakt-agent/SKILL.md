@@ -109,6 +109,11 @@ Call `propose_execution(pakt_root, intent)` with one exact request accepted by
 that root. A prepared Hyperliquid order comes from the existing venue client;
 Pakt validates it rather than planning or repairing it. Poll
 `get_execution_status(operation_id)` until it is authorized, refused, or failed.
+When a rebalance needs several IOC orders, send them as one Hyperliquid order
+batch (at most 10 legs) with one 30-second `expiresAfter`. Put risk-reducing
+and risk-increasing legs in that same batch: Pakt conservatively assumes every
+risk-increasing leg fills and every risk-reducing leg does not when checking the
+post-state limits.
 The client remains responsible for submission; neither call submits or moves
 funds. After the client observes a supported terminal Hyperliquid or Ethereum
 outcome, call `record_execution_completion(pakt_root, receipt_id, completion)`
