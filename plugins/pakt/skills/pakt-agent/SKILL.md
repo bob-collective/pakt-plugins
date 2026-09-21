@@ -108,8 +108,8 @@ Hyperliquid asset selection. `asset_selection` is either `"any"` or an exact
 
 Call `propose_execution(pakt_root, intent)` with one exact request accepted by
 that root. A prepared Hyperliquid order comes from the existing venue client;
-Pakt validates it rather than planning or repairing it. Poll
-`get_execution_status(operation_id)` until it is authorized, refused, or failed.
+Pakt validates it rather than planning or repairing it, then synchronously
+returns the signed, refused, or recovery-required result.
 When a rebalance needs several IOC orders, send them as one Hyperliquid order
 batch (at most 10 legs) with one 30-second `expiresAfter`. Put risk-reducing
 and risk-increasing legs in that same batch: Pakt conservatively assumes every
@@ -118,7 +118,7 @@ post-state limits. A separate batch whose every leg is venue-enforced
 reduce-only may use the bounded five-minute emergency-exit expiry window; it
 must still carry a future deadline, oppose an authenticated position, and stay
 within that position's aggregate size. It never becomes an unbounded signature.
-The client remains responsible for submission; neither call submits or moves
+The client remains responsible for submission; the call does not submit or move
 funds. After the client observes a supported terminal Hyperliquid or Ethereum
 outcome, call `record_execution_completion(pakt_root, receipt_id, completion)`
 to attach that typed fact to the exact signed receipt. Supported Hyperliquid
@@ -128,9 +128,14 @@ supersession. The annotation cannot authorize, sign, submit, or change replay
 eligibility. Do not treat an unbroadcast ERC-20 approval as generically expired;
 it remains usable until its Ethereum nonce is consumed.
 
-On refusal, report the named constraint and stop. On failure, do not resubmit if
-the response says a signature was released; report the receipt or operation id.
-If status returns `unsupported_market_metadata`, no mandate verdict or signature
+On `account_proof_in_progress`, do not submit another concurrent request. Wait
+for the active operation to finish. If an earlier response is uncertain, retry
+that exact request unchanged so durable replay returns its result; otherwise
+refresh `get_execution_context` before building a new proposal. This call
+started no additional proof or signature. On refusal, report the named
+constraint and stop. On failure, do not resubmit if the response says a
+signature was released; report the receipt id.
+If the call returns `unsupported_market_metadata`, no mandate verdict or signature
 was produced: do not retry unchanged until `list_hyperliquid_perp_markets`
 reports that exact asset as supported.
 
@@ -140,11 +145,16 @@ Call `get_portfolio()` for a read-only snapshot of the authenticated
 account in independent sections: `execution_wallet` carries the Privy execution
 wallet's ETH and USDT on Ethereum mainnet whenever its durable address exists;
 `funding_recovery_wallet` (the Hyperliquid master address) and
-`hyperliquid_master` (`accountValue` and `withdrawable`) are `null` until a
-Hyperliquid master is linked. A section that cannot be read carries its own
-`error` while the others still answer. Amounts are exact decimal strings.
+`hyperliquid_master` (unified USDC balances and current perpetual positions) are
+`null` until a Hyperliquid master is linked. Each position carries its venue
+`coin` and exact signed `szi` (`> 0` long, `< 0` short). A section that cannot be
+read carries its own `error` while the others still answer. Amounts are exact decimal strings.
 Addresses are resolved server-side; the call takes no arguments and never
 provisions, proves, signs, or submits anything.
+
+Inspect fresh `balances.hyperliquid_master.perpetuals.positions` before deciding
+another trade. If unavailable, stop before proposal or submission; this read
+does not authorize either.
 
 ## Tool index
 
@@ -157,8 +167,7 @@ provisions, proves, signs, or submits anything.
 | `prepare_pakt_disable(pakt_root)` | Stage permanent browser disable; does not disable |
 | `list_pakts(cursor?, page_size?)` | List account-scoped lifecycle summaries |
 | `get_execution_context(cursor?, page_size?)` | Read revalidated active roots and asset selections |
-| `propose_execution(pakt_root, intent)` | Start proof-gated sign-only authorization; never submits |
-| `get_execution_status(operation_id)` | Poll one authorization operation |
+| `propose_execution(pakt_root, intent)` | Return proof-gated sign-only authorization; never submits |
 | `record_execution_completion(pakt_root, receipt_id, completion)` | Record a typed client-observed terminal venue result |
 | `get_portfolio()` | Informational balances and deployed Pakts; PnL unavailable until reconciled |
 
