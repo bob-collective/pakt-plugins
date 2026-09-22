@@ -35,8 +35,15 @@ moves funds itself.
    draft; use `query` only when resolving one name without browsing the
    catalogue. An `any` asset selection does not require enumerating the whole
    catalogue. Inspect each `pakt_support` and follow `next_cursor` only when it
-   is non-null. Per-account margin mode is checked separately at authorization
-   time. Do not imply that an unsupported market can trade.
+   is non-null. The current policy program supports cross mode on cross-capable
+   markets and isolated mode only where the venue requires it; Pakts committed
+   to the retained legacy program remain cross-only and must be replaced before
+   using a venue-forced isolated market. User-selected isolated mode on a
+   cross-capable market is unsupported. Tell the user to return each market used
+   by an order to cross mode at Hyperliquid before retrying. Closing a position
+   removes that open-position blocker but does not reset the market's selected
+   margin mode. Never route around Pakt on the user's behalf, and do not imply
+   that an unsupported market can trade.
 2. Follow the returned `authoring_intake`. Unless the user already supplied the
    answers or explicitly requested unchanged example limits, ask in one concise
    prompt:
@@ -97,7 +104,8 @@ activate anything. After the human says they approved, confirm with
 
 Call `prepare_pakt_disable(pakt_root)` only when the user asks to permanently
 disable a root. Explain that disable is terminal and requires a separate browser
-owner-wallet approval. Preparation alone changes nothing.
+owner-wallet approval. The activation and disable challenges each last six hours;
+preparation alone changes nothing.
 
 ## Hosted authorization
 
