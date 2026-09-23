@@ -39,11 +39,15 @@ moves funds itself.
    markets and isolated mode only where the venue requires it; Pakts committed
    to the retained legacy program remain cross-only and must be replaced before
    using a venue-forced isolated market. User-selected isolated mode on a
-   cross-capable market is unsupported. Tell the user to return each market used
-   by an order to cross mode at Hyperliquid before retrying. Closing a position
-   removes that open-position blocker but does not reset the market's selected
-   margin mode. Never route around Pakt on the user's behalf, and do not imply
-   that an unsupported market can trade.
+   cross-capable market is unsupported. Every open position on a cross-capable
+   market must use cross mode, even when that market is absent from the order.
+   Each cross-capable market named by the order must also have its selected mode
+   set to cross. Closing an isolated position removes the account-wide
+   open-position blocker but does not reset that market's selected mode. Never
+   route around Pakt on the user's behalf, and do not imply that an unsupported
+   market can trade. `get_execution_context` identifies each active root's
+   policy-program generation. To replace a legacy Pakt, the human permanently
+   disables it, waits the five-minute cooldown, and activates a newly drafted Pakt.
 2. Follow the returned `authoring_intake`. Unless the user already supplied the
    answers or explicitly requested unchanged example limits, ask in one concise
    prompt:
