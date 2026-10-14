@@ -1,6 +1,6 @@
 ---
 name: pakt-agent
-description: Use when a user wants to draft, review, activate, disable, inspect, or authorize a trade through the Pakt MCP server. Explain Pakt policies in plain language, preserve human owner-wallet approval, and treat proof refusals as final.
+description: Use when a user wants to draft, review, activate, disable, inspect, or authorize a trade through the Pakt MCP server or HTTP API. Explain Pakt policies in plain language, preserve human owner-wallet approval, and treat proof refusals as final.
 ---
 
 # Pakt agent
@@ -9,6 +9,27 @@ Pakt lets a user set trading rules, approve the exact policy in a browser with
 their user-owned wallet, and ask Pakt to authorize orders that satisfy those rules. Pakt
 can return a signed, submission-ready request, but it never submits an order or
 moves funds itself.
+
+## Choose a transport
+
+Pakt exposes the same account-scoped operations and enforcement through two
+peer transports. Reuse whichever authenticated transport the agent already has:
+
+- MCP-compatible clients connect to `https://api.usepakt.ai/mcp` and complete
+  browser OAuth.
+- Code-based agents use the HTTPS API at `https://api.usepakt.ai/api/v1` with
+  `Authorization: Bearer <Pakt API key>`. Read the live OpenAPI 3.1 document at
+  `https://api.usepakt.ai/api/openapi.json`; resolve operations by `operationId`
+  and follow its current method, path, query, and JSON-body schemas.
+
+If an API key is needed, the human opens `https://usepakt.ai/api-keys` with the
+intended Pakt account, enters a **Key name**, selects **Create key**, and copies
+the secret when it appears; Pakt will not show the full key again. Keep it in the
+client's secret store or process environment. Never ask the user to paste it into
+a prompt, and never put it in source code, logs, query strings, or requests to
+any host other than `api.usepakt.ai`. Deleting the key on that page revokes it
+immediately. API keys do not authenticate MCP, and MCP or browser tokens do not
+authenticate API operations.
 
 ## Non-negotiable behavior
 
@@ -130,6 +151,12 @@ post-state limits. A separate batch whose every leg is venue-enforced
 reduce-only may use the bounded five-minute emergency-exit expiry window; it
 must still carry a future deadline, oppose an authenticated position, and stay
 within that position's aggregate size. It never becomes an unbounded signature.
+`expiresAfter` is an absolute Unix-millisecond timestamp, not a duration. The
+venue client must derive it from its current clock immediately before calling
+`propose_execution`; never reuse a portfolio snapshot or earlier tool timestamp.
+Hyperliquid Pakts commit a 30-second expiry ceiling. Keep a five-second margin
+below it for clock skew and second-boundary rounding:
+`(floor(now_ms / 1000) + 25) * 1000`.
 The client remains responsible for submission; the call does not submit or move
 funds. After the client observes a supported terminal Hyperliquid or Ethereum
 outcome, call `record_execution_completion(pakt_root, receipt_id, completion)`
@@ -168,9 +195,9 @@ Inspect fresh `balances.hyperliquid_master.perpetuals.positions` before deciding
 another trade. If unavailable, stop before proposal or submission; this read
 does not authorize either.
 
-## Tool index
+## Operation index
 
-| Tool | Purpose |
+| Operation | Purpose |
 |---|---|
 | `list_pakt_templates()` | List shipped starting points; pure |
 | `list_hyperliquid_perp_markets(query?, cursor?, page_size?)` | Resolve one live market snapshot; pure |
@@ -183,6 +210,6 @@ does not authorize either.
 | `record_execution_completion(pakt_root, receipt_id, completion)` | Record a typed client-observed terminal venue result |
 | `get_portfolio()` | Informational balances and deployed Pakts; PnL unavailable until reconciled |
 
-Use the server's current tool schemas for exact wire fields. This skill explains
-the workflow and presentation; it grants no capability and cannot widen Pakt's
-enforcement.
+Use the connected server's current MCP schemas or live OpenAPI document for exact
+wire fields. This skill explains the workflow and presentation; it grants no
+capability and cannot widen Pakt's enforcement.
