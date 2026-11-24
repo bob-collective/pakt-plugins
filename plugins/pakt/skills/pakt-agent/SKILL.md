@@ -298,9 +298,11 @@ transaction uses the payments wallet's next nonce, so a second payment signed
 before the first lands will fail on chain; wait for one to settle, or for its
 `valid_before`, before retrying with a new `operation_id`.
 
-Budgets and recurrences count a Tempo payment as pending until it lands; one
-never broadcast stops counting once a finalized block passes its
-`valid_before`. A Pakt whose budgets or recurrences cover a Tempo token cannot
+Budgets and recurrences retain a Tempo payment as pending until a safe block
+shows its account nonce consumed, or safe chain time reaches its `valid_before`.
+Latest inclusion alone does not release the entry; a used payment counts once
+from transfer history while awaiting safe clearance. A Pakt whose budgets or
+recurrences cover a Tempo token cannot
 enable `mpp-tempo-session` (`SessionUnderSpendLimit`): a channel deposit sits in
 the reserve, where the history cannot keep counting it against its payee.
 
@@ -374,21 +376,61 @@ counts: in a payments Pakt every transfer out of the master counts, including
 the owner's own; in a services Pakt every transfer out of the payments wallet
 counts except a plain return to the listed master.
 
-Budget refusals are final for the current window:
+The pending list holds at most 16 outstanding entries across the Pakt, not 16
+payments per day or over its lifetime. Entries leave it when the pinned
+attestor's RPC-reported `safe` head establishes use, nonce consumption or
+expiry. For unused EIP-3009 and Permit2 authorizations, safe chain time and
+attested authorization status establish expiry; wall-clock expiry is not
+enough. Missing safe evidence fails closed: there is no `latest` or
+fixed-confirmation fallback. On Base on 2026-11-24, measured head ages were
+latest 0 s, safe 19 s and finalized 1,096 s; these are observations, not a
+clearance-time guarantee.
+
+Explain the separate safe-head reorg risk when reviewing these limits. Cleared
+entries are not retained. A reorg below safe can remove transfers between
+finalized and safe (1,077 s, about 18 minutes in that Base observation) and
+revive still-valid forgotten authorizations. An expired-unused authorization
+revives only if chain time rolls back before its expiry. The amount at risk is
+the sum of affected forgotten authorizations, each within its per-payment cap;
+repeated clearance cycles can forget more than 16. Window and count limits
+constrain each signing decision but do not generally bound that forgotten sum
+or count: repeated unused-expiry clearances can recycle headroom even within
+one window, and windows can roll over. Removed history also lets new signatures
+spend headroom again.
+Reincluded transfers count again in canonical history but do not revoke those
+new signatures. The separate enclave-restart bound remains 16 live pending
+authorizations, and direct transfers' sequential-nonce protection is unchanged.
+
+These facts and pending entries remain in the existing proved evidence/state
+path, not a new store. Safe semantics use new Services/Payments programs and
+v3 signed spend-bearing schemas; request-only Services remains v2 and Gateway
+is unchanged. After deployment, old active spending/payments roots refuse
+payments until the owner turns off the old set and approves freshly authored
+rules. Their exact old executable and decoder remain for historical evidence
+only. Explain this cutover and the trust change, then use the existing
+owner-approved browser replacement flow. The app replaces only the sign-up
+spending defaults on the retired program, at the owner's next sign-in; never
+silently upgrade or approve anything for the user.
+Request-only Your model roots on the previous Services program keep working;
+nothing needs re-approval for them.
+
+A proved refusal is final for that exact request:
 - `BudgetExceeded` or `RecurrenceExceeded`: never retry the same payment
   blindly, split it into smaller ones, or switch to another token, payee or Pakt
   to get around the limit. Tell the user which budget or payee limit was
-  reached and that it frees up only as older transfers leave a trailing window
-  or the UTC calendar period rolls over, or when the owner approves a larger
-  limit.
+  reached. Headroom can free as older transfers leave a trailing window, the UTC
+  calendar period rolls over, unused pending authorizations expire at safe, or
+  the owner approves a larger limit. Do not promise that a new request passes.
 - `SpendHistoryIncomplete`: the account's transfer history was over the
   attestor's log cap (or read too late); nothing was paid. Do not retry in a
   loop; tell the user, who may approve a shorter window or a different budget.
 - `SpendHistoryUnavailable`: the attested history did not match the Pakt;
   report it as an infrastructure problem rather than a spending decision.
-- `PolicyStateCapacityExceeded`: 16 payments these limits count are signed but
-  not yet final. Broadcast or settle the pending ones and wait until they are
-  final (or their authorizations expire) before the next payment.
+- `PolicyStateCapacityExceeded`: 16 outstanding payments these limits count
+  still await safe-head clearance of use, nonce consumption or expiry. Submit
+  an unsubmitted original only while valid, then wait for safe clearance before
+  another payment. Already-cleared payments do not occupy the list. Do not
+  duplicate a payment or treat a missing safe head as permission to bypass Pakt.
 
 ## Account balances
 
