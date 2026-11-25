@@ -199,6 +199,13 @@ resend the exact original step with the same `operation_id`, never a new nonce
 or ID; a new `operation_id` is only for a genuinely new permitted step, not for
 a retry or a workaround (the one exception, a later attempt after an
 `Unavailable` refusal, is under Vault moves).
+On `wallet_nonce_held` (HTTP 409), nothing was signed or recorded: Pakt already
+signed another transaction from the same wallet at that nonce or a later one.
+`blocked_by {receipt_id, venue}` names that operation when Pakt knows it. If it
+is a transaction you were given but did not broadcast, broadcast it and record
+its completion; wait until it is mined, then resend. A transfer, Permit2
+approval or yield step is resent unchanged with the same `operation_id`; a
+prepared Gateway transaction is rebuilt on the wallet's current nonce.
 If the call returns `unsupported_market_metadata`, no mandate verdict or signature
 was produced: do not retry unchanged until `list_hyperliquid_perp_markets`
 reports that exact asset as supported.
@@ -338,8 +345,8 @@ allow returns `SIGNED_NOT_SUBMITTED` with `submission.raw_transaction` and
 `submission.transaction_hash`. Broadcast it yourself with
 `eth_sendRawTransaction` on that chain, and wait until it is mined before the
 next transfer on the same chain (each transfer uses the next nonce; a second
-request before then is refused as `invalid_argument` naming the reserved nonce,
-and nothing is recorded). Then call
+request before then is answered `wallet_nonce_held`, and nothing is recorded).
+Then call
 `record_execution_completion` with `ethereum_transaction_confirmed_success` (or
 `…_revert`), the transaction hash and the response's `deciding_pakt_root` (the
 Pakt that decided the transfer, also after a replacement). If the outcome is unknown, resend the same
@@ -544,10 +551,8 @@ same action again later as a new step with a fresh `operation_id`.
 An `invalid_argument` naming insufficient balance, allowance or excessive network
 fees is an unrecorded pre-proof rejection: resend unchanged only after that fact
 changes. A wallet nonce another accepted operation still holds is answered
-`yield_chain_state_pending`, also unrecorded, with `blocked_by {receipt_id,
-venue}` naming that operation when Pakt knows it. Wait until the holder is mined
-and recorded, or, if it is a step you were given but did not finish, broadcast
-it and record its completion, then resend the unchanged step. On
+`wallet_nonce_held` (see above), also unrecorded; resend the unchanged step once
+the holder is mined. On
 recovery-required or any response saying authorization was released, stop and
 report the receipt instead of re-proposing.
 
