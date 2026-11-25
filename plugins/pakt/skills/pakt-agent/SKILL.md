@@ -377,8 +377,9 @@ bound chain.
 
 A yield Pakt lets the agent move one stablecoin on one chain between the owner's
 listed ERC-4626 vaults. The agent wallet holds the stablecoin and shares; this is
-the account's existing payments wallet, not the owner's trading/Pakt signer and
-not the payments master's balance. It needs ETH on the chain to pay gas.
+the account's own yield wallet, separate from the payments wallet, the owner's
+trading/Pakt signer and the payments master's balance. It needs ETH on the chain
+to pay gas.
 Pakt permits bounded approvals and deposits, and withdrawals or redemptions back
 to that same wallet. It never broadcasts a transaction or promises a return.
 
@@ -390,6 +391,12 @@ chain, token, listed vaults, their families and groups, and maximum network fee.
 Groups are fixed when the owner approves, not a live look-through of allocations.
 Exposure is read at the attested block, not guaranteed against later price
 changes or a vault reporting false values. There is no rolling budget.
+
+Find candidate vaults with `list_yield_vaults` (Base USDC; only for accounts with
+Pakt Yield on). `eligible` marks the vaults the Pakt app offers; copy a vault's
+`address` and `family` into the draft, and call it with `vault` for that vault's
+risk report. The list is informational: its rates and ratings never authorize,
+and a `YIELD_VAULT_CATALOGUE_BUSY` answer means retry after `retry_after_secs`.
 
 Offer the optional health checks in plain words:
 
@@ -415,7 +422,7 @@ warnings, and `max_performance_fee_bps: 10000` removes the fee ceiling. A zero
 fee ceiling requires no performance fee. Zero `min_idle_atomic` disables the
 idle reserve; group and total limits must be nonzero.
 
-Use the account's `get_portfolio().balances.payments_wallet.address` for
+Use the account's `get_portfolio().balances.yield_wallet.address` for
 `agent_wallet`. Compile this draft shape with `draft_pakt(draft_json)` after
 replacing the example limits and vault addresses with the owner's choices.
 Stablecoin amounts are decimal atomic-unit strings with six decimals:
@@ -497,8 +504,12 @@ supply nonce, gas or fees. On `SIGNED_NOT_SUBMITTED`, broadcast
 `ethereum_transaction_confirmed_success` or `ethereum_transaction_confirmed_revert`,
 the `receipt_id` and the response's `deciding_pakt_root`. Only then propose the
 next step: an approval must be mined before the deposit can use its allowance.
-Payments and yield share one pending nonce per wallet and chain. A signed
-transaction has no deadline; holding it back keeps that nonce reserved.
+The yield wallet has its own nonces, so payments never wait on a yield step. A
+signed transaction has no deadline and its vault checks held only when it was
+signed, so broadcast it at once. The owner can turn the Pakt off at any time,
+signed steps or not, and the owner's app never sends a deposit or nonzero
+approval signed more than a few seconds earlier: it lets the owner cancel it
+instead, with an empty transaction at its nonce, and records it as superseded.
 If the response is uncertain, resend the exact original step unchanged with
 the same ID, including after a Pakt replacement; never invent a second step to
 recover a lost signature.
@@ -643,7 +654,8 @@ wallet's ETH and USDT on Ethereum mainnet whenever its durable address exists;
 read carries its own `error` while the others still answer. Amounts are exact decimal strings.
 `payments_wallet` carries the payments wallet's Base USDC (`null` until the
 owner creates one in the dashboard); it is informational, and payments are
-checked against the attested balance.
+checked against the attested balance. `yield_wallet` carries the yield wallet's
+Base USDC and `eth_wei` for gas (`null` until the owner creates one).
 Addresses are resolved server-side; the call takes no arguments and never
 provisions, proves, signs, or submits anything.
 
