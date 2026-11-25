@@ -378,10 +378,11 @@ bound chain.
 A yield Pakt lets the agent move one stablecoin on one chain between the owner's
 listed ERC-4626 vaults. The agent wallet holds the stablecoin and shares; this is
 the account's own yield wallet, separate from the payments wallet, the owner's
-trading/Pakt signer and the payments master's balance. It needs ETH on the chain
-to pay gas.
+trading/Pakt signer and the payments master's balance. It needs no ETH: each
+step is one ERC-4337 user operation whose network fee is paid in USDC through
+Circle's paymaster, at most the Pakt's per-move fee ceiling.
 Pakt permits bounded approvals and deposits, and withdrawals or redemptions back
-to that same wallet. It never broadcasts a transaction or promises a return.
+to that same wallet. It never submits a user operation or promises a return.
 
 **Draft.** Ask how much the owner wants to put to work and how careful they want
 to be, unless they already said. Propose limits in dollars: at most how much per
@@ -433,9 +434,9 @@ is omitted.
 
 ```json
 { "version": 1, "valid_until": 18446744073709551615, "constraints": [
-  { "kind": "yield-wallet", "venue": "yield", "instance": 1, "params": {
+  { "kind": "yield-account", "venue": "yield", "instance": 1, "params": {
       "agent_wallet": "0x…", "chain_id": 8453,
-      "gas_limit": 1500000, "max_fee_per_gas_wei": "1000000000" } },
+      "max_fee_per_step_atomic": "500000" } },
   { "kind": "yield-vaults", "venue": "yield", "instance": 1, "params": {
       "token": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
       "max_per_move_atomic": "300000000", "max_per_vault_atomic": "600000000",
@@ -463,7 +464,7 @@ Pakt is never a silent default.
 
 **Act.** Read `get_execution_context().active_pakts[].yield_policy` for the exact
 wallet, chain, token, vault objects (address, family and group), all five limits,
-optional health checks and gas/fee ceilings. Pakt does not build steps. Encode
+optional health checks and the USDC fee ceiling. Pakt does not build steps. Encode
 the accepted call yourself, or use a builder the owner chose; set up its
 credentials outside the chat and never ask for them in it. Request the step for
 the Pakt's wallet address. From a builder's answer take only `to`, `data` and
@@ -497,19 +498,27 @@ Propose each step in order:
 
 Use a fresh account-wide `operation_id` for each new step, distinct from service,
 payments and Permit2 operation IDs. `value` may be omitted for zero. Never
-supply nonce, gas or fees. On `SIGNED_NOT_SUBMITTED`, broadcast
-`submission.raw_transaction` unchanged with `eth_sendRawTransaction` on its
-`submission.chain_id`. Wait until it is mined, then call
-`record_execution_completion` with the exact `submission.transaction_hash`,
-`ethereum_transaction_confirmed_success` or `ethereum_transaction_confirmed_revert`,
-the `receipt_id` and the response's `deciding_pakt_root`. Only then propose the
-next step: an approval must be mined before the deposit can use its allowance.
-The yield wallet has its own nonces, so payments never wait on a yield step. A
-signed transaction has no deadline and its vault checks held only when it was
-signed, so broadcast it at once. The owner can turn the Pakt off at any time,
-signed steps or not, and the owner's app never sends a deposit or nonzero
-approval signed more than a few seconds earlier: it lets the owner cancel it
-instead, with an empty transaction at its nonce, and records it as superseded.
+supply nonce, gas or fees. If the answer is `yield_account_setup_required`
+(HTTP 409, nothing recorded), the yield account first needs the owner's
+one-time smart-account delegation and/or a USDC fee permit, as its
+`delegation` and `fee_permit` name: ask the owner to open the Pakt app, which
+signs them, and resend the same step with them as `step.account_setup`. On
+`yield_paymaster_unavailable`, retry later. On `SIGNED_NOT_SUBMITTED`, send
+`submission.user_operation` unchanged (adding `submission.eip7702_auth` as
+`eip7702Auth` when it is not null) with `eth_sendUserOperation` to an ERC-4337
+bundler for `submission.entry_point` on `submission.chain_id`. Wait until its
+`UserOperationEvent` lands, then call `record_execution_completion` with
+`submission.user_op_hash` as `tx_hash`,
+`ethereum_transaction_confirmed_success` or `ethereum_transaction_confirmed_revert`
+as the event reports, the `receipt_id` and the response's `deciding_pakt_root`.
+Only then propose the next step: an approval must land before the deposit can
+use its allowance. The yield account has its own EntryPoint sequence, so
+payments never wait on a yield step. A signed user operation has no deadline
+and its vault checks held only when it was signed, so send it at once. The
+owner can turn the Pakt off at any time, signed steps or not, and the owner's
+app never sends a deposit or nonzero approval signed more than a few seconds
+earlier: it lets the owner cancel it instead, with an empty user operation at
+its sequence, and records it as superseded.
 If the response is uncertain, resend the exact original step unchanged with
 the same ID, including after a Pakt replacement; never invent a second step to
 recover a lost signature.
