@@ -1,14 +1,14 @@
 ---
 name: pakt-agent
-description: Use when a user wants to draft, review, activate, disable, inspect, or authorize a trade through the Pakt MCP server or HTTP API. Explain Pakt policies in plain language, preserve human owner-wallet approval, and treat proof refusals as final.
+description: Use when a user wants to draft, review, activate, disable, inspect, or authorize trading, payments, services, or vault moves through the Pakt MCP server or HTTP API. Explain Pakt policies in plain language, preserve human owner-wallet approval, and treat proof refusals as final.
 ---
 
 # Pakt agent
 
-Pakt lets a user set trading rules, approve the exact policy in a browser with
-their user-owned wallet, and ask Pakt to authorize orders that satisfy those rules. Pakt
-can return a signed, submission-ready request, but it never submits an order or
-moves funds itself.
+Pakt lets a user set rules, approve the exact policy in a browser with their
+user-owned wallet, and ask Pakt to authorize requests that satisfy those rules.
+Pakt can return a signed, submission-ready request, but it never submits an
+order or moves funds itself.
 
 ## Choose a transport
 
@@ -28,8 +28,8 @@ the secret when it appears; Pakt will not show the full key again. Keep it in th
 client's secret store or process environment. Never ask the user to paste it into
 a prompt, and never put it in source code, logs, query strings, or requests to
 any host other than `api.usepakt.ai`. Deleting the key on that page revokes it
-immediately. API keys do not authenticate MCP, and MCP or browser tokens do not
-authenticate API operations.
+immediately. API keys do not authenticate MCP. MCP tokens do not authenticate API
+operations; browser sessions reach only the web app's explicit operation list.
 
 ## Non-negotiable behavior
 
@@ -159,8 +159,9 @@ batch (at most 10 legs). Put risk-reducing
 and risk-increasing legs in that same batch: Pakt conservatively assumes every
 risk-increasing leg fills and every risk-reducing leg does not when checking the
 post-state limits.
-One rule governs retries: a nonce together with the order legs identifies one
-proposal, and the deadline is not part of it. If the outcome is unknown (lost
+For Hyperliquid orders, one rule governs retries: a nonce together with the
+order legs identifies one proposal, and the deadline is not part of it. If the
+outcome is unknown (lost
 response, timeout, internal error, or `account_proof_in_progress`), resend the
 same order unchanged: Pakt returns the stored result, including its original
 deadline, or decides it once. If the outcome is known and you want another
@@ -189,10 +190,15 @@ eligibility. Do not treat an unbroadcast ERC-20 approval as generically expired;
 it remains usable until its Ethereum nonce is consumed.
 
 On `account_proof_in_progress`, do not submit another concurrent request; wait
-for the active operation to finish, then follow the nonce rule above. On refusal
-or `invalid_argument`, report the reason and stop. If the response says a
-signature was released or recovery is required, do not resubmit; report the
-receipt id.
+for the active operation to finish, then retry by the rule for that kind of
+request: the nonce rule above for a Hyperliquid order, the same `operation_id`
+for a yield step. On refusal or `invalid_argument`, report the reason and stop.
+If the response says a signature was released or recovery is required, do not
+resubmit; report the receipt id. For a yield step whose outcome is unknown,
+resend the exact original step with the same `operation_id`, never a new nonce
+or ID; a new `operation_id` is only for a genuinely new permitted step, not for
+a retry or a workaround (the one exception, a later attempt after an
+`Unavailable` refusal, is under Vault moves).
 If the call returns `unsupported_market_metadata`, no mandate verdict or signature
 was produced: do not retry unchanged until `list_hyperliquid_perp_markets`
 reports that exact asset as supported.
@@ -231,7 +237,7 @@ make any new attempt with a fresh challenge and a new `operation_id`. After the
 merchant settles, call `record_execution_completion` with `service_reported`
 and the settlement transaction hash from its payment receipt. To draft a paying
 services Pakt, add `service-account` (the account's payments wallet address,
-lowercase hex, from `get_portfolio().payments_wallet.address`),
+lowercase hex, from `get_portfolio().balances.payments_wallet.address`),
 `payment-assets` and `payment-payees`. `draft_pakt` adds `state-source-config`
 (state source 3, the deployed service-payment attestor key) automatically and
 refuses a different key, so leave it out.
@@ -348,7 +354,7 @@ master) and resend. The payments wallet pays network fees in ETH, so it needs
 ETH on each chain.
 
 To draft a payments Pakt, add `payments-wallet` (`agent_wallet`: the payments
-wallet address, lowercase hex, from `get_portfolio().payments_wallet.address`;
+wallet address, lowercase hex, from `get_portfolio().balances.payments_wallet.address`;
 and per chain the owner's `master`, `gas_limit` of at least 80,000 and
 `max_fee_per_gas_wei`), `payment-assets` (pinned stablecoins only),
 optionally `payment-payees` (listed payees only:
@@ -359,6 +365,191 @@ names, never addresses), all at venue `payments`, instance 1, and
 staging payments attestor, which services Pakts also pin) at venue `config`.
 Pakt adds the payments wallet as the `refill` payee, tagged `refill`, on every
 bound chain.
+
+### Vault moves (yield)
+
+A yield Pakt lets the agent move one stablecoin on one chain between the owner's
+listed ERC-4626 vaults. The agent wallet holds the stablecoin and shares; this is
+the account's existing payments wallet, not the owner's trading/Pakt signer and
+not the payments master's balance. It needs ETH on the chain to pay gas.
+Pakt permits bounded approvals and deposits, and withdrawals or redemptions back
+to that same wallet. It never broadcasts a transaction or promises a return.
+
+**Draft.** Ask how much the owner wants to put to work and how careful they want
+to be, unless they already said. Propose limits in dollars: at most how much per
+move, in one vault, in a group of vaults that count as one exposure, and in all
+vaults together; also how much stablecoin to keep ready in the wallet. Show the
+chain, token, listed vaults, their families and groups, and maximum network fee.
+Groups are fixed when the owner approves, not a live look-through of allocations.
+Exposure is read at the attested block, not guaranteed against later price
+changes or a vault reporting false values. There is no rolling budget.
+
+Offer the optional health checks in plain words:
+
+- Before a deposit, simulate that deposit followed by withdrawing the existing
+  position plus the new money, at the chosen minimum return and within the gas
+  limit. A 9990 bps minimum asks for 99.9%; this does not reserve liquidity.
+- Compare the share price with a chosen earlier window and refuse a larger fall
+  or faster rise than accepted. The example allows no fall and at most 1% growth
+  over seven days, not a 1% annual yield.
+- For Morpho vaults, stop new money on warning signs: a funded market with its
+  cap cut to zero or removal pending, near-full borrowing, or reported lost
+  assets. A stable share price alone does not prove the vault is healthy.
+- Limit the Morpho performance fee, the share of earnings the vault takes.
+  The example's 2500 bps is 25%, not a fee on the deposit and not an all-in
+  ceiling on management or underlying-market fees.
+
+These checks gate nonzero approvals and deposits, never withdrawals or
+redemptions. Only deposits request the simulation. If an enabled check cannot
+be read, new money is refused; missing price or health facts never block an
+otherwise valid exit. Omit `yield-health` to disable all its checks. Within it,
+zero disables the round trip or price window, `warning_signs: false` disables
+warnings, and `max_performance_fee_bps: 10000` removes the fee ceiling. A zero
+fee ceiling requires no performance fee. Zero `min_idle_atomic` disables the
+idle reserve; group and total limits must be nonzero.
+
+Use the account's `get_portfolio().balances.payments_wallet.address` for
+`agent_wallet`. Compile this draft shape with `draft_pakt(draft_json)` after
+replacing the example limits and vault addresses with the owner's choices.
+Stablecoin amounts are decimal atomic-unit strings with six decimals:
+`"500000000"` is $500. List each vault once, in ascending address-byte order; if
+`draft_pakt` refuses the list, it names the most vaults a Pakt may list.
+Pakt pins its deployed yield attestor automatically when `state-source-config`
+is omitted.
+
+```json
+{ "version": 1, "valid_until": 18446744073709551615, "constraints": [
+  { "kind": "yield-wallet", "venue": "yield", "instance": 1, "params": {
+      "agent_wallet": "0x…", "chain_id": 8453,
+      "gas_limit": 1500000, "max_fee_per_gas_wei": "1000000000" } },
+  { "kind": "yield-vaults", "venue": "yield", "instance": 1, "params": {
+      "token": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "max_per_move_atomic": "300000000", "max_per_vault_atomic": "600000000",
+      "max_per_group_atomic": "600000000", "max_total_atomic": "1000000000",
+      "min_idle_atomic": "200000000",
+      "vaults": [ { "address": "0x…", "family": "morpho-v1", "group": 0 },
+                  { "address": "0x…", "family": "morpho-v2", "group": 1 },
+                  { "address": "0x…", "family": "erc4626", "group": 2 } ] } },
+  { "kind": "yield-health", "venue": "yield", "instance": 1, "params": {
+      "round_trip_min_bps": 9990, "price_window_secs": 604800,
+      "price_max_drop_bps": 0, "price_max_growth_bps": 100,
+      "warning_signs": true, "max_performance_fee_bps": 2500 } } ] }
+```
+
+Keep `"valid_until": 18446744073709551615`: the Pakt never expires, as the app
+drafts it. A yield Pakt with an earlier `valid_until` stops every step once that
+time has passed, withdrawals, redemptions and allowance revocations included, so
+money still in a vault stays there until the owner approves guardrails that list
+it again. Set one only when the owner wants exits to stop too.
+
+Present the returned review in plain words. When asked to activate, call
+`prepare_pakt_activation(canonical_ssz)` and give the owner its browser link.
+Only the owner approves the staged root with a visible wallet prompt; a yield
+Pakt is never a silent default.
+
+**Act.** Read `get_execution_context().active_pakts[].yield_policy` for the exact
+wallet, chain, token, vault objects (address, family and group), all five limits,
+optional health checks and gas/fee ceilings. Pakt does not build steps. Encode
+the accepted call yourself, or use a builder the owner chose; set up its
+credentials outside the chat and never ask for them in it. Request the step for
+the Pakt's wallet address. From a builder's answer take only `to`, `data` and
+`value`; Pakt supplies the nonce, gas and fees. The builder is untrusted: a
+quote or displayed rate does not authorize its calldata.
+
+Distinguish a first allocation from switching an existing position. Before
+choosing a vault, establish the owner's comparison priorities and what risk
+information they accept; the listed vaults are permission, not a ranking. For a
+switch, also establish the owner's minimum net advantage in delivered yield and
+how long it must have lasted. Compare what each vault lends against and the
+estimated network cost of leaving and entering, and say what cannot be
+established instead of substituting the displayed rate or a third-party rating.
+Missing risk data is not a clean bill of health, and different vault names need
+not mean different exposures. Do not churn between near ties.
+
+To measure a lasting advantage, use a named return source and an agreed elapsed
+time. If you derive share-price growth on chain, find the earlier block by its
+timestamp, verify the elapsed time, and compare the same raw amount of shares at
+both blocks. Read the vault's share decimals; never infer them from its family.
+Share-price growth leaves out external rewards, so it is not by itself delivered
+yield. If a builder's step is not one of the accepted calls, Pakt refuses it; do
+not propose that vault.
+Propose each step in order:
+
+```json
+{ "kind": "yield_step",
+  "step": { "operation_id": "vault-deposit-1", "chain_id": 8453,
+            "to": "0x…", "data": "0x…", "value": "0" } }
+```
+
+Use a fresh account-wide `operation_id` for each new step, distinct from service,
+payments and Permit2 operation IDs. `value` may be omitted for zero. Never
+supply nonce, gas or fees. On `SIGNED_NOT_SUBMITTED`, broadcast
+`submission.raw_transaction` unchanged with `eth_sendRawTransaction` on its
+`submission.chain_id`. Wait until it is mined, then call
+`record_execution_completion` with the exact `submission.transaction_hash`,
+`ethereum_transaction_confirmed_success` or `ethereum_transaction_confirmed_revert`,
+the `receipt_id` and the response's `deciding_pakt_root`. Only then propose the
+next step: an approval must be mined before the deposit can use its allowance.
+Payments and yield share one pending nonce per wallet and chain. A signed
+transaction has no deadline; holding it back keeps that nonce reserved.
+If the response is uncertain, resend the exact original step unchanged with
+the same ID, including after a Pakt replacement; never invent a second step to
+recover a lost signature.
+
+**Always refused.** Unlisted vaults or another token or chain; native ETH;
+unbounded or over-limit approvals and deposits; shares or withdrawals sent
+anywhere but the agent wallet; `mint`, multicalls, batches and non-ERC-4626
+calls; extra or malformed calldata; caller-selected nonce, gas or fees.
+Withdraw and redeem have no deposit cap, but must use the listed vault and the
+wallet as both owner and receiver and cannot exceed its balance. `withdraw`
+takes the stablecoin's atomic units; `redeem` takes raw vault-share units, whose
+decimals may differ. To withdraw everything, read `balanceOf(wallet)` on every
+listed vault and redeem that exact share count from each, because a rounded
+asset amount can leave dust. `get_portfolio()` does not report vault shares.
+Permission to exit is not a promise that the vault has cash when the call lands.
+
+Explain the proved yield refusals in plain words:
+
+| Refusal | Meaning |
+|---|---|
+| `YieldCallNotAllowed` | The step is not one of the accepted calls on the Pakt's chain. |
+| `YieldVaultNotAllowed` | The vault is not on the Pakt's list, or it does not hold the Pakt's stablecoin. |
+| `YieldReceiverNotWallet` | The step would send shares or money to anyone but the agent wallet. |
+| `YieldMoveExceeded` | An approval or deposit is above the per-move limit. |
+| `YieldVaultCapExceeded` | The vault would hold more than the per-vault limit after the deposit. |
+| `YieldGroupExceeded` | Vaults counted as one exposure would exceed the group's limit. |
+| `YieldTotalExceeded` | All vaults together would exceed the total limit. |
+| `YieldReserveBreached` | The wallet would keep less stablecoin than the amount to keep ready. |
+| `YieldHealthUnavailable` | The Morpho market checks could not be read, so this approval or deposit was not signed. |
+| `YieldFeeTooHigh` | The vault takes a larger share of earnings than accepted. |
+| `YieldVaultFlagged` | The vault shows an on-chain warning sign. |
+| `YieldPriceHistoryUnavailable` | The earlier share price could not be read, so this approval or deposit was not signed. |
+| `YieldPriceAnomaly` | The share price fell or rose faster than accepted. |
+| `YieldExitUnavailable` | A simulated deposit followed by a withdrawal failed, returned too little, or exceeded the gas limit, so the deposit was not signed. |
+
+If a request plainly breaks the Pakt's visible rules (an unlisted vault, an
+approval or deposit above the per-move limit, a receiver or owner other than the
+wallet), decline before proposing: name the limit or the unlisted destination
+and say that nothing was proposed. That is not a recorded Pakt refusal. If Pakt
+returns `REFUSED_NOT_SIGNED`, report its receipt and reason and stop: the
+refusal is final for that `operation_id`. Never split a move or change vaults,
+identifiers or Pakts to get around it; only the two `Unavailable` refusals
+below allow a later attempt.
+
+`YieldHealthUnavailable` and `YieldPriceHistoryUnavailable` mean a fact could
+not be read, not that a check failed; do not call the vault flagged. The step
+stays refused for its `operation_id`. Tell the owner, and you may propose the
+same action again later as a new step with a fresh `operation_id`.
+
+An `invalid_argument` naming insufficient balance, allowance or excessive network
+fees is an unrecorded pre-proof rejection: resend unchanged only after that fact
+changes. A wallet nonce another accepted operation still holds is answered
+`yield_chain_state_pending`, also unrecorded, with `blocked_by {receipt_id,
+venue}` naming that operation when Pakt knows it. Wait until the holder is mined
+and recorded, or, if it is a step you were given but did not finish, broadcast
+it and record its completion, then resend the unchanged step. On
+recovery-required or any response saying authorization was released, stop and
+report the receipt instead of re-proposing.
 
 ### Budgets and payee limits
 
@@ -371,10 +562,13 @@ and optional `max_count`) and `payee-recurrence` (per listed payee:
 `max_amount_atomic`, `period`, `max_payments`). In a payments Pakt every
 group's tokens are on one chain. Payees take optional `tags` for tag scopes.
 In a services Pakt, `returns_to` lists the owner's master per chain so a
-return to it does not count; it may not be a listed payee. Tell the user what
-counts: in a payments Pakt every transfer out of the master counts, including
-the owner's own; in a services Pakt every transfer out of the payments wallet
-counts except a plain return to the listed master.
+return to it does not count; it may not be a listed payee. Explain the selected
+scope: an all-outflow budget counts every transfer from the master (including
+the owner's own), or from the payments wallet except an eligible plain return;
+a payee or tag scope counts only payments to those payees. For an account using
+Yield, propose tagging every intended service payee `services` and scoping the
+service budget to that tag so vault deposits do not consume it; preserve the
+owner's review and approval, never silently rewrite their active spending Pakt.
 
 The pending list holds at most 16 outstanding entries across the Pakt, not 16
 payments per day or over its lifetime. Entries leave it when the pinned
@@ -448,9 +642,12 @@ checked against the attested balance.
 Addresses are resolved server-side; the call takes no arguments and never
 provisions, proves, signs, or submits anything.
 
-Inspect fresh `balances.hyperliquid_master.perpetuals.positions` before deciding
-another trade. If unavailable, stop before proposal or submission; this read
-does not authorize either.
+Before another Hyperliquid perpetual trade, inspect fresh
+`balances.hyperliquid_master.perpetuals.positions`; if unavailable, stop that
+Hyperliquid flow. This read does not authorize a proposal or submission. A yield
+move does not depend on it: use the yield policy's wallet and token with current
+chain balances and listed-vault share balances. An account without a Hyperliquid
+master must not be blocked from a yield move.
 
 ## Operation index
 
@@ -463,7 +660,7 @@ does not authorize either.
 | `prepare_pakt_disable(pakt_root)` | Stage browser disable; does not disable |
 | `list_pakts(cursor?, page_size?)` | List account-scoped lifecycle summaries |
 | `get_execution_context(cursor?, page_size?)` | Read revalidated active roots and asset selections |
-| `propose_execution(pakt_root, intent)` | Return proof-gated sign-only authorization; never submits |
+| `propose_execution(pakt_root, intent)` | Authorize a strict intent, including `yield_step` for vault moves; never submits |
 | `record_execution_completion(pakt_root, receipt_id, completion)` | Record a typed client-observed terminal venue result |
 | `get_portfolio()` | Informational balances and deployed Pakts; PnL unavailable until reconciled |
 
