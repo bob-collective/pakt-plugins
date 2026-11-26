@@ -623,8 +623,9 @@ authorizations, and direct transfers' sequential-nonce protection is unchanged.
 These facts and pending entries remain in the existing proved evidence/state
 path, not a new store. Safe semantics use new Services/Payments programs and
 v3 signed spend-bearing schemas; request-only Services remains v2. Gateway
-has its own new program, which authorizes USDC offramps and bounds their swap
-independently of the price feeds: a Gateway Pakt approved before it refuses with `policy_program_upgrade_required` until the owner turns it off and
+has its own new program, which authorizes USDC offramps, bounds their swap
+independently of the price feeds and refuses any order while a stablecoin
+price is more than 2% from one dollar (`GatewayPegOutOfBand`): a Gateway Pakt approved before it refuses with `policy_program_upgrade_required` until the owner turns it off and
 approves freshly drafted rules that list each input token (Ethereum USDT or
 USDC, as its contract with its Chainlink dollar feed) next to the Bitcoin
 entry. `list_gateway_routes` returns each supported token's entry as
