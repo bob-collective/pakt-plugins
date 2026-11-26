@@ -622,8 +622,13 @@ authorizations, and direct transfers' sequential-nonce protection is unchanged.
 
 These facts and pending entries remain in the existing proved evidence/state
 path, not a new store. Safe semantics use new Services/Payments programs and
-v3 signed spend-bearing schemas; request-only Services remains v2 and Gateway
-is unchanged. After deployment, old active spending/payments roots refuse
+v3 signed spend-bearing schemas; request-only Services remains v2. Gateway
+has its own new program for USDC offramps: a Gateway Pakt approved before it
+refuses with `policy_program_upgrade_required` until the owner turns it off and
+approves freshly drafted rules that list each input token (Ethereum USDT or
+USDC, as its contract with its Chainlink dollar feed) next to the Bitcoin
+entry. `list_gateway_routes` returns each supported token's entry as
+`pakt_support.allowed_asset`, ready to copy into the draft. After deployment, old active spending/payments roots refuse
 payments until the owner turns off the old set and approves freshly authored
 rules. Their exact old executable and decoder remain for historical evidence
 only. Explain this cutover and the trust change, then use the existing
