@@ -232,11 +232,6 @@ whole challenge: Pakt pays the first offered option the Pakt's rules admit, in
 the merchant's order (`pay_with: {chain_id, token}` narrows the options). A
 paying services Pakt always needs the challenge; never pay the merchant
 yourself, or the request is paid twice.
-The `body` must be empty or one JSON object with distinct top-level keys and no
-`messages` key below the top level. Send the exact body you will send the
-merchant, or its committed form: Pakt commits the body with the top-level
-`messages` value replaced by `"pakt:sha256:<hex SHA-256 of its exact bytes>"`,
-so the conversation is never stored. Send the merchant the full body.
 An allow returns `SIGNED_NOT_SUBMITTED` with `submission.header_name` and
 `submission.header_value`: retry the exact original request with that header
 and the same `operation_id` as the provider idempotency key. Pakt never
@@ -600,7 +595,7 @@ Yield, propose tagging every intended service payee `services` and scoping the
 service budget to that tag so vault deposits do not consume it; preserve the
 owner's review and approval, never silently rewrite their active spending Pakt.
 
-The pending list holds at most 64 outstanding entries across the Pakt, not 64
+The pending list holds at most 16 outstanding entries across the Pakt, not 16
 payments per day or over its lifetime. Entries leave it when the pinned
 attestor's RPC-reported `safe` head establishes use, nonce consumption or
 expiry. For unused EIP-3009 and Permit2 authorizations, safe chain time and
@@ -616,20 +611,18 @@ finalized and safe (1,077 s, about 18 minutes in that Base observation) and
 revive still-valid forgotten authorizations. An expired-unused authorization
 revives only if chain time rolls back before its expiry. The amount at risk is
 the sum of affected forgotten authorizations, each within its per-payment cap;
-repeated clearance cycles can forget more than 64. Window and count limits
+repeated clearance cycles can forget more than 16. Window and count limits
 constrain each signing decision but do not generally bound that forgotten sum
 or count: repeated unused-expiry clearances can recycle headroom even within
 one window, and windows can roll over. Removed history also lets new signatures
 spend headroom again.
 Reincluded transfers count again in canonical history but do not revoke those
-new signatures. The separate enclave-restart bound is 64 live pending
+new signatures. The separate enclave-restart bound remains 16 live pending
 authorizations, and direct transfers' sequential-nonce protection is unchanged.
 
 These facts and pending entries remain in the existing proved evidence/state
-path, not a new store. Safe semantics use Services/Payments programs with v3
-signed spend-bearing schemas; the current ones carry 64 pending entries and
-commit a request's top-level `messages` only as its SHA-256 digest
-(`services-request:v3`). Gateway
+path, not a new store. Safe semantics use new Services/Payments programs and
+v3 signed spend-bearing schemas; request-only Services remains v2. Gateway
 has its own new program, which authorizes USDC offramps, bounds their swap
 independently of the price feeds and refuses any order while a stablecoin
 price is more than 2% from one dollar (`GatewayPegOutOfBand`): a Gateway Pakt approved before it refuses with `policy_program_upgrade_required` until the owner turns it off and
@@ -643,10 +636,8 @@ only. Explain this cutover and the trust change, then use the existing
 owner-approved browser replacement flow. The app replaces only the sign-up
 spending defaults on the retired program, at the owner's next sign-in; never
 silently upgrade or approve anything for the user.
-Request-only Your model roots on the previous Services programs keep working,
-and Yield Pakts on the previous Yield program keep working; nothing needs
-re-approval for them. Spending/payments roots on the 16-entry program must be
-re-approved once, the same way.
+Request-only Your model roots on the previous Services program keep working;
+nothing needs re-approval for them.
 
 A proved refusal is final for that exact request:
 - `BudgetExceeded` or `RecurrenceExceeded`: never retry the same payment
@@ -660,7 +651,7 @@ A proved refusal is final for that exact request:
   loop; tell the user, who may approve a shorter window or a different budget.
 - `SpendHistoryUnavailable`: the attested history did not match the Pakt;
   report it as an infrastructure problem rather than a spending decision.
-- `PolicyStateCapacityExceeded`: 64 outstanding payments these limits count
+- `PolicyStateCapacityExceeded`: 16 outstanding payments these limits count
   still await safe-head clearance of use, nonce consumption or expiry. Submit
   an unsubmitted original only while valid, then wait for safe clearance before
   another payment. Already-cleared payments do not occupy the list. Do not
