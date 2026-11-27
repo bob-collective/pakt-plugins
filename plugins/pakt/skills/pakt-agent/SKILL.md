@@ -637,8 +637,11 @@ signed spend-bearing schemas; the current ones carry 64 pending entries and
 commit every top-level request value except `model` only as its SHA-256 digest
 (`services-request:v3`). Gateway
 has its own new program, which authorizes USDC offramps, bounds their swap
-independently of the price feeds and refuses any order while a stablecoin
-price is more than 2% from one dollar (`GatewayPegOutOfBand`): a Gateway Pakt approved before it refuses with `policy_program_upgrade_required` until the owner turns it off and
+independently of the price feeds, refuses any order while a stablecoin
+price is more than 2% from one dollar (`GatewayPegOutOfBand`), refuses an order
+while its Binance and Chainlink Bitcoin prices, and any action while its ether
+prices, differ by more than 2% (`GatewayPriceDisagreement`), and refuses gas above 0.02 ETH per
+transaction (`GatewayGasAboveCeiling`): a Gateway Pakt approved before it refuses with `policy_program_upgrade_required` until the owner turns it off and
 approves freshly drafted rules that list each input token (Ethereum USDT or
 USDC, as its contract with its Chainlink dollar feed) next to the Bitcoin
 entry. `list_gateway_routes` returns each supported token's entry as
